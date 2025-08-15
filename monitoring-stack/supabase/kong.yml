@@ -1,0 +1,188 @@
+_format_version: "2.1"
+_transform: true
+
+services:
+  - name: auth
+    url: http://auth:9999
+    routes:
+      - name: auth
+        paths:
+          - /auth/v1/
+    plugins:
+      - name: cors
+        config:
+          credentials: true
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+          methods:
+            - POST
+            - GET
+            - OPTIONS
+            - PUT
+            - DELETE
+          exposed_headers:
+            - content-range
+            - x-requested-with
+            - content-encoding
+            - content-language
+            - content-type
+            - authorization
+            - apikey
+            - x-client-info
+          max_age: 1728000
+
+  - name: rest
+    url: http://rest:3000
+    routes:
+      - name: rest
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: cors
+        config:
+          credentials: true
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+            - prefer
+            - range
+          methods:
+            - GET
+            - POST
+            - PATCH
+            - PUT
+            - DELETE
+            - OPTIONS
+            - HEAD
+          exposed_headers:
+            - content-range
+            - content-encoding
+            - content-location
+            - content-language
+            - content-type
+            - link
+            - x-requested-with
+            - x-request-id
+            - x-transaction-id
+            - x-kong-proxy-latency
+            - x-kong-upstream-latency
+            - x-kong-upstream-status
+            - x-kong-request-id
+            - x-kong-proxy-latency
+            - x-kong-upstream-latency
+            - x-kong-upstream-status
+          max_age: 1728000
+
+  - name: storage
+    url: http://storage:5000
+    routes:
+      - name: storage
+        paths:
+          - /storage/v1/
+    plugins:
+      - name: cors
+        config:
+          credentials: true
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+            - HEAD
+          exposed_headers:
+            - content-range
+            - content-encoding
+            - content-language
+            - content-type
+            - x-requested-with
+            - x-request-id
+            - x-transaction-id
+            - x-kong-proxy-latency
+            - x-kong-upstream-latency
+            - x-kong-upstream-status
+          max_age: 1728000
+
+  - name: realtime
+    url: http://realtime:4000
+    routes:
+      - name: realtime
+        paths:
+          - /realtime/v1/
+    plugins:
+      - name: cors
+        config:
+          credentials: true
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+          methods:
+            - GET
+            - POST
+            - OPTIONS
+            - PUT
+            - DELETE
+          exposed_headers:
+            - content-range
+            - x-requested-with
+            - content-encoding
+            - content-language
+            - content-type
+            - authorization
+            - apikey
+            - x-client-info
+          max_age: 1728000
+
+  - name: edge-functions
+    url: http://edge-runtime:9998
+    routes:
+      - name: functions
+        paths:
+          - /functions/v1/
+    plugins:
+      - name: cors
+        config:
+          credentials: true
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+            - HEAD
+          exposed_headers:
+            - content-range
+            - x-requested-with
+            - content-encoding
+            - content-language
+            - content-type
+            - authorization
+            - apikey
+            - x-client-info
+          max_age: 1728000
+
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: ${ANON_KEY:-your-anon-key}
+  - username: service_role
+    keyauth_credentials:
+      - key: ${SERVICE_ROLE_KEY:-your-service-role-key}

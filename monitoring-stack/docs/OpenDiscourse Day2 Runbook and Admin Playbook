@@ -1,0 +1,180 @@
+
+
+Applies to: opendiscourse.net single‑host deployment (Traefik + Supabase + Weaviate + Neo4j + LocalAI/vLLM + n8n + Flowise + SearxNG + MinIO + Prometheus + Grafana + Admin Portal + oauth2-proxy)
+
+1) First 24 hours checklist
+
+
+
+2) Health & Observability
+
+2.1 Where to look
+
+Admin Portal (admin.opendiscourse.net) — consolidated health + quick benches
+
+Grafana (grafana.opendiscourse.net) — time‑series dashboards, retention
+
+Prometheus (internal) — scrapes: Traefik, cAdvisor, RAG API, GraphRAG API
+
+docker logs — last resort per‑service logs
+
+2.2 Key panels (Grafana)
+
+Ingest pipeline: pdf-worker → RAG API → Weaviate
+
+Query latency: p50/p95 for /query & /ingest
+
+Neo4j operations: node/rel upserts per minute (from GraphRAG API metrics)
+
+Infrastructure: CPU/Mem/Net (cAdvisor), Traefik req/s + 4xx/5xx
+
+2.3 Metrics of record (scraped by Prometheus)
+
+ragapi_request_latency_seconds (histogram)
+
+ragapi_requests_total (counter)
+
+graphrag_request_latency_seconds (histogram)
+
+graphrag_requests_total (counter)
+
+traefik_* (built‑in), container_* (cAdvisor)
+
+Retention default: 15 days (tune in prometheus.yml).
+
+3) Security & Access
+
+OAuth (GitHub) enforced via oauth2-proxy for Admin Portal, Grafana, OpenWebUI, Flowise, n8n.
+
+JWT (Supabase JWKS) enforced for RAG API & GraphRAG API.
+
+RLS enabled on opendiscourse.findings (owner‑only).
+
+Secrets in /opt/opendiscourse/.env (0600). Optional sealed backup (Vaultwarden or age/SOPS).
+
+3.1 Onboarding a new admin
+
+Add their GitHub account to the allowed list (OAUTH_ALLOWED_EMAILS or GitHub org/team in oauth2-proxy).
+
+Share no passwords; they authenticate via GitHub.
+
+Grant them Supabase role if they need SQL access.
+
+4) Operating procedures
+
+4.1 Backups
+
+Manual: sudo /opt/opendiscourse/bin/backup_now.sh
+
+Schedule (root crontab): 0 3 * * * /opt/opendiscourse/bin/backup_now.sh >> /var/log/opendiscourse-backup.log 2>&1
+
+Verify: restic snapshots (with env from .env) → check MinIO objects
+
+4.2 Updates
+
+Pull & restart core stack:
+
+(cd /opt/opendiscourse && docker compose pull && docker compose up -d)
+(cd /opt/opendiscourse/supabase/project && docker compose pull && docker compose up -d)
+
+Change AI endpoint (CPU↔GPU): re‑run installer with --gpu off|vllm
+
+4.3 Scaling down/up
+
+Toggle services by docker compose up -d <svc> or docker compose stop <svc>
+
+Adjust memory/CPU reservations in compose.yml if needed
+
+4.4 Incident response
+
+Identify blast radius (Admin Portal health → which lane is red?)
+
+Check logs of failing service: docker logs -n 200 <svc>
+
+Roll restart the edge: docker restart traefik
+
+If Weaviate schema drift → re‑POST /weaviate/init_schema
+
+If Neo4j lock contention → docker restart neo4j; re‑ingest pending rels
+
+Create a diagnostic bundle: ./scripts/diag_collect.sh
+
+5) Performance & Benchmarks
+
+Admin Portal → “Bench” tab:
+
+LLM RTT (LocalAI/vLLM): /v1/chat/completions p50/p95
+
+RAG pipeline: ingest → embed → upsert total time
+
+Query latency under concurrency (small k6 burst)
+
+Store every run as a Prometheus time‑series & keep notes (Grafana annotations)
+
+Tuning knobs:
+
+Weaviate HNSW: efConstruction, maxConnections (class settings)
+
+Chunk size/overlap in RAG API splitter
+
+vLLM model size (8B vs 13B), tensor parallel (if multiple GPUs)
+
+6) Data lifecycle
+
+PDFs/TXTs → /opt/opendiscourse/data/inbox → indexed
+
+Findings table: opendiscourse.findings (Supabase; RLS on)
+
+Backups: Postgres dump + Neo4j dump → MinIO (restic)
+
+Retention: adjust Prometheus TSDB & MinIO lifecycle policies
+
+7) Admin Portal — quick guide
+
+Health: Live status of Traefik, Weaviate, Neo4j, APIs
+
+Bench: run 30–60s micro‑bench; results graphed; metrics exported at /metrics
+
+Tools: JWKS check, Weaviate schema reset, Neo4j constraints check
+
+Auth: OAuth (GitHub) required; add GitHub emails/org in env
+
+8) SLOs (suggested)
+
+RAG /query: p95 < 1.5s @ k≤5
+
+Ingest 10‑page PDF: < 20s end‑to‑end (CPU), < 10s (GPU)
+
+Availability (admin surfaces): 99.5% monthly
+
+Alert when breached via n8n → email/slack/webhook.
+
+9) Runbooks (mini)
+
+9.1 Replace LLM model
+
+For LocalAI: place model into localai_models volume; update model name in clients.
+
+For vLLM: change --model arg in compose; docker compose up -d vllm.
+
+9.2 Rotate Cloudflare token
+
+Create new token (Zone:Read + DNS:Edit) → update /opt/opendiscourse/.env → docker restart traefik.
+
+9.3 Restore from backup
+
+restic restore latest --target /restore
+
+Import PG: psql < /restore/pg_dumpall.sql
+
+Import Neo4j: neo4j-admin database load neo4j --from=/restore/neo4j.dump --force
+
+10) Future enhancements
+
+Loki/Promtail for logs in Grafana alongside metrics
+
+Traefik forwardAuth via OIDC to Supabase (single IdP) instead of GitHub
+
+LlamaIndex sidecar & graph‑augmented retrievers
+
+n8n flows: daily crawl of legislative sites → inbox → auto‑tag entities

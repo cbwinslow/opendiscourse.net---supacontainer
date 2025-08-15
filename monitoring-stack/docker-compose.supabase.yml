@@ -1,0 +1,178 @@
+version: '3.8'
+
+services:
+  db:
+    image: supabase/postgres:15.1.0.117
+    container_name: supabase_db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./supabase/init/:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  studio:
+    image: supabase/studio:20231214-7b9f2e1
+    container_name: supabase_studio
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: http://localhost:8000
+      STUDIO_DEFAULT_ORGANIZATION: default-org
+      STUDIO_DEFAULT_PROJECT: default-project
+    depends_on:
+      - meta
+      - kong
+
+  kong:
+    image: kong:2.8.1
+    container_name: supabase_kong
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    environment:
+      KONG_DATABASE: off
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+    volumes:
+      - ./supabase/kong.yml:/var/lib/kong/kong.yml
+    depends_on:
+      - auth
+      - rest
+      - realtime
+      - storage
+      - meta
+
+  auth:
+    image: supabase/gotrue:v2.143.2
+    container_name: supabase_auth
+    restart: unless-stopped
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-your-super-secret-password}@db:5432/postgres?sslmode=disable
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: http://localhost:3000,http://localhost:3001
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+    depends_on:
+      - db
+
+  rest:
+    image: postgrest/postgrest:v11.2.0
+    container_name: supabase_rest
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-your-super-secret-password}@db:5432/postgres
+      PGRST_DB_SCHEMA: public,storage
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    depends_on:
+      - db
+
+  realtime:
+    image: supabase/realtime:v2.25.12
+    container_name: supabase_realtime
+    restart: unless-stopped
+    command: >
+      bash -c \
+      "sleep 5 && \
+      /usr/local/bin/elixir \
+        --sname realtime \
+        --no-halt \
+        --erl '-kernel inet_dist_listen_min 9100' \
+        --erl '-kernel inet_dist_listen_max 9100' \
+        -S mix phx.server"
+    environment:
+      PORT: 4000
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-your-secret-key-base}
+      DB_HOST: db
+      DB_NAME: postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+      DB_PORT: 5432
+      DB_SSL: "false"
+      SLOT_NAME: supabase_realtime
+      REPLICATION_MODE: RLS
+      REPLICATION_POLL_INTERVAL: 100
+      API_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt}
+      API_ENABLE_CONSOLE: "true"
+    depends_on:
+      - db
+
+  meta:
+    image: supabase/postgres-meta:v0.66.0
+    container_name: supabase_meta
+    restart: unless-stopped
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+    depends_on:
+      - db
+
+  storage:
+    image: supabase/storage-api:v0.41.5
+    container_name: supabase_storage
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-your-super-secret-password}@db:5432/postgres?sslmode=disable
+      PGRST_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt}
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: stub
+      GLOBAL_S3_BUCKET: stub
+      ENABLE_IMAGE_TRANSFORMATION: "true"
+      IMGPROXY_URL: http://imgproxy:5001
+    volumes:
+      - storage-data:/var/lib/storage
+    depends_on:
+      - db
+      - imgproxy
+
+  imgproxy:
+    image: darthsim/imgproxy:v3.7.0
+    container_name: supabase_imgproxy
+    restart: unless-stopped
+    environment:
+      IMGPROXY_BIND: :5001
+      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
+      IMGPROXY_USE_ETAG: "true"
+    volumes:
+      - storage-data:/var/lib/storage
+
+  edge-runtime:
+    image: supabase/edge-runtime:v1.34.2
+    container_name: supabase_edge_runtime
+    restart: unless-stopped
+    environment:
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_ANON_KEY: ${ANON_KEY:-your-anon-key}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:-your-service-role-key}
+    volumes:
+      - ./supabase/functions:/home/deno/functions
+    depends_on:
+      - kong
+
+volumes:
+  db-data:
+  storage-data:

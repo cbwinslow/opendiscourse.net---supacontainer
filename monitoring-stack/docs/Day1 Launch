@@ -1,0 +1,37 @@
+First‑Run Procedure (exact steps)
+
+Supabase user
+
+Visit https://supabase.opendiscourse.net. Create an initial user.
+
+From your app or Supabase Auth, obtain a JWT (or temporarily set --auth off on the installer, but I recommend keeping auth on).
+
+Initialize Weaviate schema for embeddings
+
+curl -s https://api.opendiscourse.net/weaviate/init_schema \
+  -H "Authorization: Bearer <SUPABASE_JWT>" \
+  -H 'content-type: application/json' \
+  -d '{"class_name":"Document","model":"nomic-embed-text","base_url":"https://localai.opendiscourse.net/v1"}'
+
+Optional: switch to vLLM (GPU)
+Re‑run installer with --gpu vllm. It flips all clients to https://vllm.<domain>/v1.
+
+4. Quick ingest & query
+
+curl -s https://api.opendiscourse.net/ingest \
+  -H "Authorization: Bearer <SUPABASE_JW T>" \
+  -H 'content-type: application/json' \
+  -d '{"texts":["Section 1. The Commission shall publish quarterly reports..."],"sources":["HB‑12"]}'
+
+curl -s https://api.opendiscourse.net/query \
+  -H "Authorization: Bearer <SUPABASE_JWT>" \
+  -H 'content-type: application/json' \
+  -d '{"query":"disclosure requirements"}' | jq
+
+5. Auto‑ingest PDFs
+
+sudo cp /path/to/legislation.pdf /opt/opendiscourse/data/inbox/
+# pdf-worker will ingest automatically
+
+6. Backups (encrypted via restic → MinIO)
+sudo /opt/opendiscourse/bin/backup_now.sh
