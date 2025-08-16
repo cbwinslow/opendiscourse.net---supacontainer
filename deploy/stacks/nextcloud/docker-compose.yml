@@ -1,0 +1,90 @@
+# Nextcloud docker-compose for single-host deployment
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:10.6
+    container_name: nextcloud_db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${NEXTCLOUD_DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${NEXTCLOUD_DB_NAME}
+      - MYSQL_USER=${NEXTCLOUD_DB_USER}
+      - MYSQL_PASSWORD=${NEXTCLOUD_DB_PASSWORD}
+    volumes:
+      - nextcloud_db_data:/var/lib/mysql
+    networks:
+      - nextcloud_net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p${NEXTCLOUD_DB_ROOT_PASSWORD}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nextcloud_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - nextcloud_redis:/data
+    networks:
+      - nextcloud_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  app:
+    image: nextcloud:apache
+    container_name: nextcloud_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - MYSQL_HOST=db
+      - MYSQL_DATABASE=${NEXTCLOUD_DB_NAME}
+      - MYSQL_USER=${NEXTCLOUD_DB_USER}
+      - MYSQL_PASSWORD=${NEXTCLOUD_DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_HOST_PASSWORD=${NEXTCLOUD_REDIS_PASSWORD}
+      - OVERWRITEPROTOCOL=https
+      - TRUSTED_PROXIES=127.0.0.1
+    volumes:
+      - nextcloud_data:/var/www/html
+      - nextcloud_config:/var/www/html/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.${DOMAIN}`)"
+      - "traefik.http.routers.nextcloud.entrypoints=websecure"
+      - "traefik.http.routers.nextcloud.tls.certresolver=letsencryptresolver"
+    networks:
+      - nextcloud_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fS https://localhost/status.php || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  adminer:
+    image: adminer:latest
+    container_name: nextcloud_adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    networks:
+      - nextcloud_net
+
+networks:
+  nextcloud_net:
+    external: false
+
+volumes:
+  nextcloud_db_data:
+  nextcloud_redis:
+  nextcloud_data:
+  nextcloud_config:

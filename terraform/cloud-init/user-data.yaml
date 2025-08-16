@@ -1,0 +1,138 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - jq
+  - unzip
+  - git
+  - python3-pip
+  - software-properties-common
+  - apt-transport-https
+  - ufw
+
+write_files:
+  - path: /usr/local/bin/install-docker.sh
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      # Install Docker CE (official script) and the Compose plugin
+      if ! command -v docker >/dev/null 2>&1; then
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        sh /tmp/get-docker.sh
+        mkdir -p /etc/docker
+      fi
+      # Install Compose plugin if missing
+      if ! docker compose version >/dev/null 2>&1; then
+        apt-get update -y
+        apt-get install -y docker-compose-plugin
+      fi
+      systemctl enable --now docker
+
+runcmd:
+  # 1) Ensure SSH daemon is running (cloud providers usually handle this)
+  - [ systemctl, enable, --now, ssh ]
+  # 2) Basic firewall (openssh, http, https)
+  - [ ufw, --force, reset ]
+  - [ ufw, default, deny, incoming ]
+  - [ ufw, default, allow, outgoing ]
+  - [ ufw, allow, OpenSSH ]
+  - [ ufw, allow, 80/tcp ]
+  - [ ufw, allow, 443/tcp ]
+  - [ ufw, --force, enable ]
+  # 3) Install Docker and Compose plugin
+  - /usr/local/bin/install-docker.sh
+  # 4) Detect and mount the attached block device (first non-root block device)
+  - |
+    set -euo pipefail
+    MOUNTPOINT="/opt/opendiscourse"
+    mkdir -p "${MOUNTPOINT}"
+    # Find candidate device (skip loop/backing devices and root FS)
+    DEVICE=""
+    for dev in /dev/disk/by-id/*; do
+      # Resolve to actual device
+      resolved="$(readlink -f "$dev" || true)"
+      # Skip root device
+      if mount | grep -q "$resolved"; then
+        continue
+      fi
+      # Skip if device is /dev/sda (may be root) - we use first not-mounted device
+      if [ -b "$resolved" ] && ! mount | grep -q "$resolved"; then
+        DEVICE="$resolved"
+        break
+      fi
+    done
+    if [ -n "$DEVICE" ]; then
+      echo "Found device: $DEVICE"
+      # Check if there's a filesystem
+      if ! blkid "$DEVICE" >/dev/null 2>&1; then
+        mkfs.ext4 -F "$DEVICE"
+      fi
+      # Use UUID for fstab
+      UUID=$(blkid -s UUID -o value "$DEVICE")
+      if ! grep -q "$UUID" /etc/fstab 2>/dev/null; then
+        echo "UUID=${UUID} ${MOUNTPOINT} ext4 defaults,nofail 0 2" >> /etc/fstab
+      fi
+      mount -a || true
+    else
+      echo "No extra block device detected; using local disk for ${MOUNTPOINT}"
+      mkdir -p "${MOUNTPOINT}"
+    fi
+  # 5) Clone the repository into /opt/opendiscourse if not present
+  - |
+    set -euo pipefail
+    REPO_DIR="/opt/opendiscourse"
+    if [ ! -d "${REPO_DIR}/.git" ]; then
+      git clone https://github.com/your-org/opendiscourse-deploy.git "${REPO_DIR}" || git clone https://github.com/your-org/opendiscourse.git "${REPO_DIR}" || true
+    else
+      git -C "${REPO_DIR}" pull || true
+    fi
+    chown -R root:root "${REPO_DIR}"
+    chmod -R 755 "${REPO_DIR}"
+  # 6) Make the installer executable and try to run the supplied installer non-interactively
+  - |
+    set -euo pipefail
+    REPO_DIR="/opt/opendiscourse"
+    # Prefer the one-click installer if present
+    if [ -f "${REPO_DIR}/opendiscourse_oneclick.sh" ]; then
+      chmod +x "${REPO_DIR}/opendiscourse_oneclick.sh"
+      # Run with conservative defaults; user should edit .env after first-boot if needed
+      NONINTERACTIVE=1 DOMAIN=opendiscourse.local EMAIL=admin@localhost CF_TOKEN= "${REPO_DIR}/opendiscourse_oneclick.sh" --non-interactive || true
+    elif [ -f "${REPO_DIR}/deploy/install_opendiscourse.sh" ]; then
+      chmod +x "${REPO_DIR}/deploy/install_opendiscourse.sh"
+      # Run installer as root (it performs docker-compose up -d)
+      env DEBIAN_FRONTEND=noninteractive "${REPO_DIR}/deploy/install_opendiscourse.sh" || true
+    elif [ -f "${REPO_DIR}/install.sh" ]; then
+      chmod +x "${REPO_DIR}/install.sh"
+      env DEBIAN_FRONTEND=noninteractive "${REPO_DIR}/install.sh" || true
+    else
+      echo "No known installer found in ${REPO_DIR}. Please SSH in and run the installer manually."
+    fi
+  # 7) Create a small systemd unit that ensures docker compose stacks are up on reboot (placeholder)
+  - |
+    cat > /etc/systemd/system/opendiscourse-bootstrap.service <<'EOF'
+    [Unit]
+    Description=OpenDiscourse Bootstrap (run installer if present)
+    After=network-online.target docker.service
+    Wants=docker.service network-online.target
+
+    [Service]
+    Type=oneshot
+    ExecStart=/bin/bash -lc 'if [ -d /opt/opendiscourse ]; then cd /opt/opendiscourse && if [ -f deploy/install_opendiscourse.sh ]; then /opt/opendiscourse/deploy/install_opendiscourse.sh; fi; fi'
+    RemainAfterExit=yes
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    systemctl daemon-reload
+    systemctl enable --now opendiscourse-bootstrap.service || true
+
+final_message: |
+  OpenDiscourse bootstrap completed. If the repository installer ran successfully, services will be started inside Docker.
+  - Check logs: sudo journalctl -u opendiscourse-bootstrap -n 200
+  - Check docker: sudo docker ps
+  - Visit the server IP on ports 80/443 (you may need to update DNS and .env)

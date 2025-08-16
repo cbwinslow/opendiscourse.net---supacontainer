@@ -1,0 +1,67 @@
+# LAMP stack (Lightweight) docker-compose for single-host deployment
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:10.6
+    container_name: lamp_mariadb
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${LAMP_DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${LAMP_DB_NAME}
+      - MYSQL_USER=${LAMP_DB_USER}
+      - MYSQL_PASSWORD=${LAMP_DB_PASSWORD}
+    volumes:
+      - lamp_db_data:/var/lib/mysql
+    networks:
+      - lamp_net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p${LAMP_DB_ROOT_PASSWORD}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  apache:
+    image: php:8.1-apache
+    container_name: lamp_apache
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    volumes:
+      - lamp_www:/var/www/html
+      - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+    environment:
+      - VIRTUAL_HOST=${LAMP_HOST:-lamp.local}
+    ports:
+      - "8080:80"
+    networks:
+      - lamp_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: lamp_phpmyadmin
+    restart: unless-stopped
+    environment:
+      - PMA_HOST=mariadb
+      - PMA_USER=${LAMP_DB_USER}
+      - PMA_PASSWORD=${LAMP_DB_PASSWORD}
+    ports:
+      - "8082:80"
+    networks:
+      - lamp_net
+    depends_on:
+      - mariadb
+
+networks:
+  lamp_net:
+    external: false
+
+volumes:
+  lamp_db_data:
+  lamp_www:

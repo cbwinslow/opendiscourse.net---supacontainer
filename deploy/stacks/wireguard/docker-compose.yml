@@ -1,0 +1,41 @@
+# WireGuard Docker Compose (single-host)
+version: '3.8'
+
+services:
+  wireguard:
+    image: linuxserver/wireguard:latest
+    container_name: wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-UTC}
+      - SERVERURL=${WG_SERVER_URL:-your.server.ip.or.domain} # replace or set via env
+      - SERVERPORT=${WG_SERVER_PORT:-51820}
+      - PEERS=${WG_PEERS:-1}
+      - PEERDNS=${WG_PEER_DNS:-1.1.1.1}
+      - INTERNAL_SUBNET=${WG_INTERNAL_SUBNET:-10.13.13.0/24}
+    ports:
+      - "${WG_SERVER_PORT:-51820}:51820/udp"
+    volumes:
+      - wireguard_config:/config
+      - /lib/modules:/lib/modules:ro
+    restart: unless-stopped
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wg show || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  backend:
+    external: false
+
+volumes:
+  wireguard_config:
