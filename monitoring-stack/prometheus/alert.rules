@@ -11,7 +11,7 @@ groups:
       severity: warning
     annotations:
       summary: "Container {{ $labels.name }} restarted ({{ $value }} times in last 5m)"
-      description: "Container {{ $labels.name }} in pod {{ $labels.pod }} has restarted {{ $value }} times in the last 5 minutes."
+      description: "Container {{ $labels.name }} has restarted {{ $value }} times in the last 5 minutes."
 
   # Alert for high CPU usage
   - alert: HighCpuUsage
@@ -21,7 +21,7 @@ groups:
       severity: warning
     annotations:
       summary: "High CPU usage on {{ $labels.name }}"
-      description: "{{ $labels.name }} is using {{ $value }}% of CPU (threshold: 80%)"
+      description: "{{ $labels.name }} is using {{ $value | humanize }}% of CPU (threshold: 80%)"
 
   # Alert for high memory usage
   - alert: HighMemoryUsage
@@ -31,7 +31,7 @@ groups:
       severity: warning
     annotations:
       summary: "High memory usage on {{ $labels.name }}"
-      description: "{{ $labels.name }} is using {{ $value }}% of its memory limit (threshold: 80%)"
+      description: "{{ $labels.name }} is using {{ $value | humanize }}% of its memory limit (threshold: 80%)"
 
   # Alert for container OOM kills
   - alert: ContainerOOMKilled
@@ -61,14 +61,87 @@ groups:
       severity: warning
     annotations:
       summary: "High error rate in {{ $labels.container }}"
-      description: "{{ $value }} errors per second in {{ $labels.container }} (threshold: 5/s)"
+      description: "{{ $value | humanize }} errors per second in {{ $labels.container }} (threshold: 5/s)"
 
-  # Alert for disk space
+  # Disk Space Alerts - Multiple Thresholds
+  - alert: CriticalDiskSpace
+    expr: (node_filesystem_avail_bytes{mountpoint=~"/|/var/lib/docker"} * 100) / node_filesystem_size_bytes{mountpoint=~"/|/var/lib/docker"} < 10
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "CRITICAL: Low disk space on {{ $labels.mountpoint }} ({{ $labels.instance }})"
+      description: "Only {{ $value | humanize }}% ({{ $value | humanize1024 }}B) available on {{ $labels.mountpoint }}"
+
   - alert: LowDiskSpace
-    expr: (node_filesystem_avail_bytes{mountpoint="/"} * 100) / node_filesystem_size_bytes{mountpoint="/"} < 20
+    expr: (node_filesystem_avail_bytes{mountpoint=~"/|/var/lib/docker"} * 100) / node_filesystem_size_bytes{mountpoint=~"/|/var/lib/docker"} < 20
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Warning: Low disk space on {{ $labels.mountpoint }} ({{ $labels.instance }})"
+      description: "Only {{ $value | humanize }}% ({{ $value | humanize1024 }}B) available on {{ $labels.mountpoint }}"
+
+  # Disk Space Prediction Alert
+  - alert: PredictedOutOfDiskSpace
+    expr: predict_linear(node_filesystem_avail_bytes{mountpoint=~"/|/var/lib/docker"}[6h], 4 * 24 * 3600) < 0
+    for: 1h
+    labels:
+      severity: warning
+    annotations:
+      summary: "Predicted out of disk space on {{ $labels.mountpoint }} ({{ $labels.instance }})"
+      description: "Disk is predicted to fill up in 4 days if current growth continues"
+
+  # High Disk I/O Alerts
+  - alert: HighDiskIO
+    expr: rate(node_disk_io_time_seconds_total{device=~"sd.|xvd.|nvme.+"}[1m]) * 100 > 80
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High disk I/O on {{ $labels.device }} ({{ $labels.instance }})"
+      description: "Disk I/O utilization is {{ $value | humanize }}% (threshold: 80%)"
+
+  # Network Alerts
+  - alert: HighNetworkTraffic
+    expr: rate(node_network_receive_bytes_total[2m]) * 8 > 1000000000  # 1 Gbps
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High network traffic on {{ $labels.device }} ({{ $labels.instance }})"
+      description: "Network traffic is {{ $value | humanize }} bps (threshold: 1 Gbps)"
+
+  # Suspicious IP Activity
+  - alert: SuspiciousIPActivity
+    expr: sum(rate(container_network_receive_packets_total{name=~"ai-.*"}[5m])) by (pod_name, interface) > 10000
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Suspicious network activity from pod {{ $labels.pod_name }}"
+      description: "High network packet rate ({{ $value | humanize }} pkt/s) detected on interface {{ $labels.interface }}"
+
+  # High Resource Utilization Services
+  - alert: HighResourceService
+    expr: |
+      (
+        rate(container_cpu_usage_seconds_total{name=~"ai-.*"}[5m]) * 100 > 70
+        or
+        (container_memory_usage_bytes{name=~"ai-.*"} / container_spec_memory_limit_bytes{name=~"ai-.*"} * 100) > 70
+      )
+      and
+      (
+        rate(container_cpu_usage_seconds_total{name=~"ai-.*"}[5m]) * 100 > 50
+        or
+        (container_memory_usage_bytes{name=~"ai-.*"} / container_spec_memory_limit_bytes{name=~"ai-.*"} * 100) > 50
+      )
     for: 10m
     labels:
       severity: warning
     annotations:
-      summary: "Low disk space on {{ $labels.instance }}"
-      description: "Only {{ $value }}% space left on {{ $labels.mountpoint }}"
+      summary: "High resource utilization in {{ $labels.name }}"
+      description: |
+        Container {{ $labels.name }} is using:
+        - CPU: {{ with printf "rate(container_cpu_usage_seconds_total{name='%s'}[5m]) * 100" $labels.name | query }}{{ . | first | value | humanize }}%{{ end }}
+        - Memory: {{ with printf "(container_memory_usage_bytes{name='%s'} / container_spec_memory_limit_bytes{name='%s'} * 100)" $labels.name $labels.name | query }}{{ . | first | value | humanize }}%{{ end }}

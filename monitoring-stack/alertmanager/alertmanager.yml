@@ -1,0 +1,75 @@
+global:
+  # The smarthost and SMTP sender used for mail notifications.
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@opendiscourse.net'
+  smtp_auth_username: 'alerts@opendiscourse.net'
+  # Note: Use environment variable SMTP_PASSWORD for security
+  smtp_require_tls: true
+
+# The directory from which notification templates are read.
+templates:
+- '/etc/alertmanager/template/*.tmpl'
+
+# The root route on which each incoming alert enters.
+route:
+  # The labels by which incoming alerts are grouped together.
+  group_by: ['alertname', 'severity']
+  
+  # When a new group of alerts is created by an incoming alert, wait at least
+  # 'group_wait' to send the initial notification.
+  # This way, alerts that are firing simultaneously can be batched into a single notification.
+  group_wait: 30s
+  
+  # When the first notification was sent, wait 'group_interval' to send a batch
+  # of new alerts that started firing for that group.
+  group_interval: 5m
+  
+  # If an alert has successfully been sent, wait 'repeat_interval' to
+  # resend them.
+  repeat_interval: 3h 
+  
+  # A default receiver
+  receiver: 'email-admin'
+  
+  # All the above attributes are inherited by all child routes and can 
+  # overwritten on each.
+  routes:
+  - match:
+      severity: 'critical'
+    receiver: 'email-pagerduty'
+    continue: true
+    
+  - match:
+      alertname: 'HighCpuUsage'
+    receiver: 'email-devops'
+    
+  - match:
+      alertname: 'HighMemoryUsage'
+    receiver: 'email-devops'
+
+# Receivers
+receivers:
+- name: 'email-admin'
+  email_configs:
+  - to: 'admin@opendiscourse.net'
+    send_resolved: true
+    
+- name: 'email-devops'
+  email_configs:
+  - to: 'devops@opendiscourse.net'
+    send_resolved: true
+    
+- name: 'email-pagerduty'
+  pagerduty_configs:
+  - service_key: 'your-pagerduty-integration-key'
+    send_resolved: true
+
+# Inhibit rules allow to mute a set of alerts given that another alert is
+# firing.
+inhibit_rules:
+# Alert 'Watchdog' is inhibiting a list of alerts via the 'severity' label.
+- source_match:
+    alertname: 'Watchdog'
+  target_match:
+    severity: 'none'  # This will never match, but it's required
+  equal: ['alertname']
