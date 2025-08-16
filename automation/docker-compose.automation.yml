@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # n8n - Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=${N8N_HOST:-n8n.opendiscourse.net}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - N8N_WEBHOOK_URL=https://n8n.opendiscourse.net/
+      - N8N_EMAIL_MODE=smtp
+      - N8N_SMTP_HOST=${SMTP_HOST}
+      - N8N_SMTP_PORT=${SMTP_PORT}
+      - N8N_SMTP_USER=${SMTP_USER}
+      - N8N_SMTP_PASS=${SMTP_PASSWORD}
+      - N8N_SMTP_SENDER=n8n@opendiscourse.net
+      - N8N_SMTP_SSL=true
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-$(openssl rand -hex 32)}
+      - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_JWT_SECRET:-$(openssl rand -hex 32)}
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-${ADMIN_PASSWORD}}
+      - N8N_DIAGNOSTICS_ENABLED=true
+      - N8N_PAYLOAD_SIZE_MAX=16
+      - N8N_METRICS=true
+      - N8N_METRICS_PREFIX=n8n_workflow_
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - opendiscourse_net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n.rule=Host(`n8n.opendiscourse.net`) || Host(`n8n.cloudcurio.cc`)"
+      - "traefik.http.routers.n8n.entrypoints=websecure"
+      - "traefik.http.routers.n8n.tls.certresolver=le"
+      - "traefik.http.routers.n8n.tls.domains[0].main=opendiscourse.net"
+      - "traefik.http.routers.n8n.tls.domains[0].sans=*.opendiscourse.net,cloudcurio.cc,*.cloudcurio.cc"
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+      - "traefik.http.routers.n8n.middlewares=auth-basic@docker"
+
+  # Backup System
+  backup-manager:
+    image: offen/docker-volume-backup:latest
+    container_name: backup-manager
+    restart: unless-stopped
+    environment:
+      - BACKUP_FILENAME=opendiscourse-backup-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_RETENTION_DAYS=7
+      - BACKUP_ARCHIVE=tar
+      - BACKUP_CRON_EXPRESSION=0 2 * * *
+      - BACKUP_UPLOAD_S3_ENDPOINT=s3.opendiscourse.net
+      - BACKUP_UPLOAD_S3_BUCKET=opendiscourse-backups
+      - BACKUP_UPLOAD_S3_ACCESS_KEY_ID=${MINIO_ACCESS_KEY}
+      - BACKUP_UPLOAD_S3_SECRET_ACCESS_KEY=${MINIO_SECRET_KEY}
+      - BACKUP_STOP_CONTAINER_LABEL=backup.stop-during-backup=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - backup_data:/backup
+      - /var/lib/docker/volumes:/var/lib/docker/volumes:ro
+    networks:
+      - opendiscourse_net
+    labels:
+      - "traefik.enable=false"
+
+  # Database Backup
+  db-backup:
+    image: postgres:15-alpine
+    container_name: db-backup
+    restart: unless-stopped
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PGUSER=${POSTGRES_USER}
+      - PGHOST=supabase-db
+      - PGDATABASE=${POSTGRES_DB}
+    volumes:
+      - db_backup:/backup
+    entrypoint: |
+      sh -c "
+      mkdir -p /backup/db && \
+      pg_dump -Fc -f /backup/db/opendiscourse-$(date +%Y%m%d).dump ${POSTGRES_DB} && \
+      find /backup/db -type f -name '*.dump' -mtime +7 -delete
+      "
+    networks:
+      - opendiscourse_net
+    labels:
+      - "traefik.enable=false"
+
+networks:
+  opendiscourse_net:
+    external: true
+
+volumes:
+  n8n_data:
+  backup_data:
+  db_backup:

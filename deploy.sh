@@ -13,7 +13,6 @@ LOG_FILE="$STACK_DIR/deploy.log"
 
 # Colors for output
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
@@ -70,13 +69,20 @@ start_services() {
     log "Starting OpenDiscourse stack..."
     cd "$STACK_DIR"
     
+    # Check for automation services
+    local compose_files="-f docker-compose.yml"
+    if [ -f "$SCRIPT_DIR/automation/docker-compose.automation.yml" ]; then
+        log "Including automation services..."
+        compose_files="$compose_files -f $SCRIPT_DIR/automation/docker-compose.automation.yml"
+    fi
+    
     # Pull latest images
     log "Pulling latest Docker images..."
-    docker-compose pull --quiet
+    docker-compose $compose_files pull --quiet
     
     # Start all services
     log "Starting containers..."
-    docker-compose up -d --remove-orphans
+    docker-compose $compose_files up -d --remove-orphans
     
     # Wait for key services to be ready
     wait_for_service "PostgreSQL" "localhost" 5432
@@ -89,38 +95,63 @@ start_services() {
 stop_services() {
     log "Stopping OpenDiscourse stack..."
     cd "$STACK_DIR"
-    docker-compose down
+    
+    # Check for automation services
+    local compose_files="-f docker-compose.yml"
+    if [ -f "$SCRIPT_DIR/automation/docker-compose.automation.yml" ]; then
+        compose_files="$compose_files -f $SCRIPT_DIR/automation/docker-compose.automation.yml"
+    fi
+    
+    docker-compose $compose_files down
     log "OpenDiscourse stack stopped."
 }
 
 restart_services() {
     log "Restarting OpenDiscourse stack..."
     cd "$STACK_DIR"
-    docker-compose restart
+    
+    # Check for automation services
+    local compose_files="-f docker-compose.yml"
+    if [ -f "$SCRIPT_DIR/automation/docker-compose.automation.yml" ]; then
+        compose_files="$compose_files -f $SCRIPT_DIR/automation/docker-compose.automation.yml"
+    fi
+    
+    docker-compose $compose_files restart
     log "OpenDiscourse stack restarted."
 }
 
 status_services() {
     cd "$STACK_DIR"
-    docker-compose ps
+    
+    # Check for automation services
+    local compose_files="-f docker-compose.yml"
+    if [ -f "$SCRIPT_DIR/automation/docker-compose.automation.yml" ]; then
+        compose_files="$compose_files -f $SCRIPT_DIR/automation/docker-compose.automation.yml"
+    fi
+    
+    docker-compose $compose_files ps
 }
 
 update_stack() {
     log "Updating OpenDiscourse stack..."
     
-    # Pull latest code
-    git -C "$SCRIPT_DIR" pull
+    # Check for automation services
+    local compose_files="-f docker-compose.yml"
+    if [ -f "$SCRIPT_DIR/automation/docker-compose.automation.yml" ]; then
+        compose_files="$compose_files -f $SCRIPT_DIR/automation/docker-compose.automation.yml"
+    fi
     
     # Rebuild and restart
     cd "$STACK_DIR"
-    docker-compose pull
-    docker-compose up -d --build
+    docker-compose $compose_files pull
+    docker-compose $compose_files up -d --build
     
     log "OpenDiscourse stack updated successfully!"
 }
 
 backup_stack() {
-    local backup_dir="$STACK_DIR/backups/$(date +%Y%m%d_%H%M%S)"
+    local backup_dir
+    backup_dir="$STACK_DIR/backups/$(date +%Y%m%d_%H%M%S)"
     
     log "Creating backup in $backup_dir..."
     mkdir -p "$backup_dir"

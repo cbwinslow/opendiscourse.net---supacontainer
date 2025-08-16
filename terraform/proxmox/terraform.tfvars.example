@@ -1,0 +1,14 @@
+# Proxmox API Configuration
+pm_api_url          = "https://proxmox-server:8006/api2/json"
+pm_api_token_id     = "user@pve!token-name"
+pm_api_token_secret = "your-api-token-secret"
+
+# VM Configuration
+target_node    = "pve"
+template_name  = "ubuntu-2204-cloudinit"
+storage_pool   = "local-lvm"
+vm_ip          = "192.168.1.100"
+vm_gateway     = "192.168.1.1"
+vm_username    = "opendiscourse"
+vm_password    = "ChangeMe123!"
+domain         = "opendiscourse.net"

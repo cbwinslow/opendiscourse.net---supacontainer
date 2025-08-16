@@ -1,0 +1,137 @@
+_format_version: "2.1"
+_transform: true
+
+services:
+  - name: auth
+    url: http://supabase-auth:9999
+    routes:
+      - name: auth
+        paths:
+          - /auth/v1/
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - https://${DOMAIN}
+            - https://*.${DOMAIN}
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          headers:
+            - authorization
+            - apikey
+            - content-type
+
+  - name: rest
+    url: http://supabase-rest:3000
+    routes:
+      - name: rest
+        paths:
+          - /rest/v1/
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - https://${DOMAIN}
+            - https://*.${DOMAIN}
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          headers:
+            - authorization
+            - apikey
+            - content-type
+
+  - name: realtime
+    url: http://supabase-realtime:4000
+    routes:
+      - name: realtime
+        paths:
+          - /realtime/v1/
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - https://${DOMAIN}
+            - https://*.${DOMAIN}
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+            - WEBSOCKET
+          headers:
+            - authorization
+            - apikey
+            - content-type
+
+  - name: storage
+    url: http://supabase-storage:5000
+    routes:
+      - name: storage
+        paths:
+          - /storage/v1/
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - https://${DOMAIN}
+            - https://*.${DOMAIN}
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          headers:
+            - authorization
+            - apikey
+            - content-type
+
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: ${ANON_KEY}
+  - username: service_role
+    keyauth_credentials:
+      - key: ${SERVICE_ROLE_KEY}
+
+plugins:
+  - name: key-auth
+    config:
+      key_in_header: true
+      key_in_query: true
+      key_in_body: false
+      hide_credentials: false
+      anonymous: ""
+  - name: cors
+    config:
+      origins:
+        - https://${DOMAIN}
+        - https://*.${DOMAIN}
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      headers:
+        - authorization
+        - apikey
+        - content-type
+      exposed_headers:
+        - content-range
+        - x-list-total-count
+      max_age: 86400
+      credentials: true
