@@ -1,0 +1,83 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+  
+  # Add host metrics receiver
+  hostmetrics:
+    collection_interval: 10s
+    scrapers:
+      cpu:
+      disk:
+      load:
+      memory:
+      network:
+      paging:
+      processes:
+
+  # Add Prometheus receiver
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['0.0.0.0:8888']
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+  
+  memory_limiter:
+    check_interval: 2s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+extensions:
+  health_check: {}
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+exporters:
+  logging:
+    loglevel: debug
+  
+  # Export to Prometheus
+  prometheusremotewrite:
+    endpoint: "http://prometheus:9090/api/v1/write"
+    timeout: 30s
+  
+  # Export to Jaeger
+  jaeger:
+    endpoint: "jaeger:14250"
+    tls:
+      insecure: true
+  
+  # Export to Loki
+  loki:
+    endpoint: "http://loki:3100/loki/api/v1/push"
+    labels:
+      job: opendiscourse
+    default_labels_enabled:
+      exporter: true
+      job: true
+
+service:
+  extensions: [health_check, pprof, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger, logging]
+    metrics:
+      receivers: [otlp, hostmetrics, prometheus]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite, logging]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [loki, logging]

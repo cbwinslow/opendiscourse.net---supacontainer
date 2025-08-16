@@ -1,0 +1,74 @@
+# Alert rules for OpenDiscourse AI Crews
+
+groups:
+- name: ai-crews-alerts
+  rules:
+  # Alert for any container that has been restarted more than 3 times in the last 5 minutes
+  - alert: ContainerRestarted
+    expr: changes(container_last_seen{name=~"ai-.*"}[5m]) > 3
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Container {{ $labels.name }} restarted ({{ $value }} times in last 5m)"
+      description: "Container {{ $labels.name }} in pod {{ $labels.pod }} has restarted {{ $value }} times in the last 5 minutes."
+
+  # Alert for high CPU usage
+  - alert: HighCpuUsage
+    expr: (sum(rate(container_cpu_usage_seconds_total{name=~"ai-.*"}[1m])) by (name) * 100) > 80
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU usage on {{ $labels.name }}"
+      description: "{{ $labels.name }} is using {{ $value }}% of CPU (threshold: 80%)"
+
+  # Alert for high memory usage
+  - alert: HighMemoryUsage
+    expr: (container_memory_usage_bytes{name=~"ai-.*"} / container_spec_memory_limit_bytes{name=~"ai-.*"} * 100) > 80
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High memory usage on {{ $labels.name }}"
+      description: "{{ $labels.name }} is using {{ $value }}% of its memory limit (threshold: 80%)"
+
+  # Alert for container OOM kills
+  - alert: ContainerOOMKilled
+    expr: time() - container_last_seen{name=~"ai-.*"} < 60
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Container OOM Killed: {{ $labels.name }}"
+      description: "Container {{ $labels.name }} was OOM killed and restarted"
+
+  # Alert for service down
+  - alert: ServiceDown
+    expr: up{job=~"ai-.*"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Service down: {{ $labels.job }}"
+      description: "{{ $labels.job }} has been down for more than 1 minute"
+
+  # Alert for high error rate in logs
+  - alert: HighErrorRate
+    expr: sum(rate({container=~"ai-.*"} |~ "(error|exception|fail|critical|fatal)" [5m])) by (container) > 5
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High error rate in {{ $labels.container }}"
+      description: "{{ $value }} errors per second in {{ $labels.container }} (threshold: 5/s)"
+
+  # Alert for disk space
+  - alert: LowDiskSpace
+    expr: (node_filesystem_avail_bytes{mountpoint="/"} * 100) / node_filesystem_size_bytes{mountpoint="/"} < 20
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Low disk space on {{ $labels.instance }}"
+      description: "Only {{ $value }}% space left on {{ $labels.mountpoint }}"

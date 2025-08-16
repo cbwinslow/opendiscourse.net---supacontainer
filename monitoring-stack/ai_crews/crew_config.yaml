@@ -1,0 +1,108 @@
+# AI Crews Configuration
+
+# Main orchestrator configuration
+orchestrator:
+  image: opendiscourse/ai-orchestrator:latest
+  environment:
+    - NODE_ENV=production
+    - LOG_LEVEL=info
+    - OTEL_SERVICE_NAME=ai-orchestrator
+    - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    - REDIS_URL=redis://redis:6379/0
+    - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/opendiscourse
+  deploy:
+    resources:
+      limits:
+        cpus: '2'
+        memory: 2G
+
+# Crew configurations
+crews:
+  security_crew:
+    image: opendiscourse/ai-security:latest
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - OTEL_SERVICE_NAME=ai-security
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - REDIS_URL=redis://redis:6379/1
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  monitoring_crew:
+    image: opendiscourse/ai-monitoring:latest
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - OTEL_SERVICE_NAME=ai-monitoring
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - PROMETHEUS_URL=http://prometheus:9090
+      - LOKI_URL=http://loki:3100
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1.5G
+
+  deployment_crew:
+    image: opendiscourse/ai-deployment:latest
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - OTEL_SERVICE_NAME=ai-deployment
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+# Monitoring configuration
+monitoring:
+  metrics:
+    enabled: true
+    port: 9464
+    path: /metrics
+  tracing:
+    enabled: true
+    sampling_rate: 1.0
+  logging:
+    level: info
+    format: json
+
+# Resource limits
+resources:
+  cpu_limit: 4
+  memory_limit: 4G
+  restart_policy: unless-stopped
+
+# Health checks
+health_checks:
+  initial_delay: 30s
+  interval: 10s
+  timeout: 5s
+  retries: 3
+
+# Alerting
+alerting:
+  enabled: true
+  webhook_url: https://hooks.slack.com/services/...
+  critical_services:
+    - ai-orchestrator
+    - ai-security
+    - ai-monitoring
+    - ai-deployment
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention_days: 7
+  s3_bucket: ai-crew-backups
+  s3_region: us-east-1

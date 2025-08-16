@@ -1,6 +1,14 @@
 apiVersion: 1
 
 providers:
+  - name: 'AI Crews'
+    orgId: 1
+    folder: 'AI Monitoring'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/ai_crews
   - name: 'default'
     orgId: 1
     folder: 'AI Orchestrator'
