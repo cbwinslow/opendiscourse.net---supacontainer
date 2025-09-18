@@ -9,6 +9,7 @@ This document outlines the various tasks and workflows that power the OpenDiscou
 - [Error Handling](#error-handling)
 - [Monitoring and Logging](#monitoring-and-logging)
 - [Performance Considerations](#performance-considerations)
+- [Deployment Tasks](#deployment-tasks)
 
 ## Task Types
 
@@ -147,7 +148,50 @@ queues:
 | Query Processing | Low | Medium | Low |
 | Background Tasks | Low | Low | Medium |
 
-## Deployment
+## Deployment Tasks
+
+### Supabase Self-Hosting
+
+#### Prerequisites
+- Docker and Docker Compose
+- At least 4GB RAM and 2 CPU cores
+
+#### Deployment Steps
+1. Generate secure environment variables using the Supabase env generator script
+2. Start Supabase services using Docker Compose
+3. Access Supabase Studio at http://localhost:3000
+4. Configure authentication, storage, and other services as needed
+
+#### Supabase Services
+- **PostgreSQL**: Core database with required extensions
+- **Auth (GoTrue)**: Authentication service for user management and JWT token issuance
+- **PostgREST**: RESTful API interface for PostgreSQL database
+- **Realtime**: WebSocket server for listening to database changes
+- **Storage**: File storage service with S3/local storage backends
+- **Studio**: Web-based dashboard for managing Supabase services
+- **Supavisor**: Connection pooler for efficient database connection management
+
+#### Environment Variables
+All sensitive configuration is stored in a `.env` file with securely generated passwords and keys.
+
+### Next.js Application
+
+#### Prerequisites
+- Node.js >= 18.17.0
+- pnpm package manager
+
+#### Setup Steps
+1. Install dependencies using pnpm
+2. Configure environment variables for Supabase integration
+3. Build the application
+4. Start the development or production server
+
+#### Key Features
+- **Authentication**: Email/password signup and login with email confirmation
+- **Session Management**: Server-side session handling with middleware
+- **Data Protection**: Row Level Security to protect user data
+- **Profile Management**: Update user profile information
+- **Responsive UI**: Mobile-friendly interface using Tailwind CSS
 
 ### Container Resources
 
@@ -171,3 +215,12 @@ autoscaling:
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
 ```
+
+### One-Click Deployment
+
+The platform includes a one-click deployment script that:
+1. Checks all prerequisites
+2. Deploys Supabase services
+3. Sets up the Next.js application
+4. Builds the Next.js application
+5. Shows deployment status and access information

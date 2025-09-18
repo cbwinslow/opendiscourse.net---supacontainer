@@ -1,0 +1,18 @@
+name = "mcp-server"
+main = "src/index.ts"
+compatibility_date = "2023-05-18"
+
+[build]
+  command = "npm run build"
+
+[[migrations]]
+tag = "v1"
+description = "Initial version"
+
+[env.production]
+workers_dev = true
+route = ""
+zone_id = ""
+
+[env.staging]
+workers_dev = true

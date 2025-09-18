@@ -1,0 +1,24 @@
+{
+  "name": "mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server with various tools for Cloudflare Workers",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["mcp", "cloudflare", "workers", "serverless"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "itty-router": "^3.0.11"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20230801.0",
+    "typescript": "^5.2.2",
+    "wrangler": "^3.0.0"
+  }
+}

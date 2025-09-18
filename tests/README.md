@@ -1,67 +1,100 @@
 # OpenDiscourse Test Suite
 
-This directory contains automated tests for the OpenDiscourse platform, including integration, unit, and end-to-end tests.
+This directory contains the complete test suite for the OpenDiscourse platform.
 
 ## Test Structure
 
-```
-tests/
-├── integration/      # Integration tests
-├── e2e/             # End-to-end tests
-├── unit/            # Unit tests
-├── fixtures/        # Test data and fixtures
-└── utils/           # Test utilities
-```
+- `unit/` - Unit tests for individual functions and components
+- `integration/` - Integration tests for service interactions
+- `e2e/` - End-to-end tests for complete workflows
+- `docker/` - Docker-specific tests
+- `network/` - Network connectivity and communication tests
+- `frontend/` - Frontend component tests
+- `backend/` - Backend service tests
 
 ## Running Tests
 
-### Prerequisites
-- Python 3.8+
-- Docker and Docker Compose
-- Node.js 16+ (for frontend tests)
-
 ### Setup
 
-1. Install test dependencies:
 ```bash
-pip install -r tests/requirements.txt
-npm install --prefix tests/e2e
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install test dependencies
+pip install -r requirements-test.txt
 ```
 
-2. Start the test environment:
+### Run All Tests
+
 ```bash
-docker-compose -f tests/docker-compose.test.yml up -d
+# Run entire test suite
+pytest
+
+# Run with coverage
+pytest --cov=.
+
+# Run with HTML report
+pytest --html=report.html
 ```
 
-### Running Tests
+### Run Specific Test Categories
 
-Run all tests:
 ```bash
-pytest tests/
-```
-
-Run specific test suite:
-```bash
+# Unit tests
 pytest tests/unit/
+
+# Integration tests
 pytest tests/integration/
-npm test --prefix tests/e2e
+
+# End-to-end tests
+pytest tests/e2e/
+
+# Docker tests
+pytest tests/docker/
+
+# Network tests
+pytest tests/network/
+
+# Frontend tests
+pytest tests/frontend/
+
+# Backend tests
+pytest tests/backend/
 ```
 
-## Writing Tests
+## Test Categories
 
-- Place unit tests in `tests/unit/`
-- Place integration tests in `tests/integration/`
-- Place end-to-end tests in `tests/e2e/`
-- Use fixtures from `tests/fixtures/` for test data
+### Unit Tests
+Test individual functions and components in isolation with mocked dependencies.
 
-## Test Coverage
+### Integration Tests
+Test interactions between services and components.
 
-Generate coverage report:
-```bash
-pytest --cov=opendiscourse tests/
-```
+### End-to-End Tests
+Test complete user workflows and system behavior.
 
-View coverage in browser:
-```bash
-python -m http.server --directory htmlcov
-```
+### Docker Tests
+Test Docker image builds, container deployments, and service configurations.
+
+### Network Tests
+Test network connectivity, service communication, and API endpoints.
+
+### Frontend Tests
+Test frontend components, user interfaces, and client-side functionality.
+
+### Backend Tests
+Test backend services, APIs, and server-side functionality.
+
+## Test Configuration
+
+The test suite uses configuration files and environment variables:
+
+- `pytest.ini` - pytest configuration
+- `conftest.py` - pytest fixtures and configuration
+- `.env.test` - test environment variables
+- `docker-compose.test.yml` - Docker Compose for testing
+
+## Continuous Integration
+
+Tests are automatically run in CI/CD pipelines to ensure code quality and prevent regressions.

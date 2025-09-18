@@ -143,6 +143,23 @@ Each agent exposes Prometheus metrics on `/metrics`:
 2. Check token expiration
 3. Validate RBAC configuration
 
+### Supabase Integration Issues
+
+#### Connection Problems
+1. Verify Supabase services are running: `docker-compose ps`
+2. Check environment variables in `.env` file
+3. Ensure network connectivity between agents and Supabase
+
+#### Authentication Errors
+1. Verify ANON_KEY and SERVICE_ROLE_KEY are correct
+2. Check JWT_SECRET matches between Supabase and agents
+3. Ensure user has proper permissions
+
+#### Database Access Issues
+1. Verify PostgreSQL is accessible
+2. Check database credentials
+3. Ensure required database extensions are installed
+
 ### Getting Help
 For additional support, please open an issue on our [GitHub repository](https://github.com/yourorg/opendiscourse/issues).
 
